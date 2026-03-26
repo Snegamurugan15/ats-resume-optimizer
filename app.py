@@ -578,37 +578,69 @@ def upload_to_drive(drive_json_str: str, folder_id: str,
     Upload files to Google Drive.
     files = list of (filename, bytes_content, mime_type)
     Returns the Drive folder link or None.
+
+    IMPORTANT: Share your Drive folder with the service account email
+    (client_email in your JSON key) as Editor before using this.
     """
     if not DRIVE_OK or not drive_json_str.strip():
         return None
     try:
         creds_dict = json.loads(drive_json_str)
+        service_account_email = creds_dict.get("client_email", "your service account email")
         creds = service_account.Credentials.from_service_account_info(
             creds_dict,
-            scopes=["https://www.googleapis.com/auth/drive.file"]
+            scopes=["https://www.googleapis.com/auth/drive"]  # fixed: was drive.file
         )
         service = build("drive", "v3", credentials=creds)
 
-        # Create subfolder
+        # Verify the parent folder is accessible
+        if folder_id:
+            try:
+                service.files().get(
+                    fileId=folder_id,
+                    supportsAllDrives=True
+                ).execute()
+            except Exception:
+                st.error(
+                    f"Cannot access Drive folder. "
+                    f"Open your Google Drive folder → Share → add "
+                    f"`{service_account_email}` as **Editor**, then try again."
+                )
+                return None
+
+        # Create subfolder inside the shared parent
         folder_meta = {
             "name"    : folder_name,
             "mimeType": "application/vnd.google-apps.folder",
             "parents" : [folder_id] if folder_id else []
         }
-        folder = service.files().create(body=folder_meta, fields="id").execute()
+        folder = service.files().create(
+            body=folder_meta,
+            fields="id",
+            supportsAllDrives=True
+        ).execute()
         fid = folder["id"]
 
         # Upload each file
-        for filename, content, mime in files:
+        for filename, file_content, mime in files:
             file_meta = {"name": filename, "parents": [fid]}
-            media = MediaIoBaseUpload(io.BytesIO(content), mimetype=mime)
-            service.files().create(body=file_meta, media_body=media, fields="id").execute()
+            media = MediaIoBaseUpload(io.BytesIO(file_content), mimetype=mime)
+            service.files().create(
+                body=file_meta,
+                media_body=media,
+                fields="id",
+                supportsAllDrives=True
+            ).execute()
 
-        # Make folder accessible via link
-        service.permissions().create(
-            fileId=fid,
-            body={"type": "anyone", "role": "reader"}
-        ).execute()
+        # Make subfolder shareable via link (non-fatal if it fails)
+        try:
+            service.permissions().create(
+                fileId=fid,
+                body={"type": "anyone", "role": "reader"},
+                supportsAllDrives=True
+            ).execute()
+        except Exception:
+            pass
 
         return f"https://drive.google.com/drive/folders/{fid}"
     except Exception as e:
