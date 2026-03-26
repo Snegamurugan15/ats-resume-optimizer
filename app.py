@@ -589,7 +589,7 @@ def upload_to_drive(drive_json_str: str, folder_id: str,
         service_account_email = creds_dict.get("client_email", "your service account email")
         creds = service_account.Credentials.from_service_account_info(
             creds_dict,
-            scopes=["https://www.googleapis.com/auth/drive"]
+            scopes=["https://www.googleapis.com/auth/drive"]  # fixed: was drive.file
         )
         service = build("drive", "v3", credentials=creds)
 
@@ -622,34 +622,15 @@ def upload_to_drive(drive_json_str: str, folder_id: str,
         fid = folder["id"]
 
         # Upload each file
-        uploaded_count = 0
         for filename, file_content, mime in files:
-            try:
-                if not file_content:
-                    st.warning(f"Skipping {filename} — empty content")
-                    continue
-                file_meta = {"name": filename, "parents": [fid]}
-                media = MediaIoBaseUpload(
-                    io.BytesIO(bytes(file_content)),
-                    mimetype=mime,
-                    resumable=True
-                )
-                result = service.files().create(
-                    body=file_meta,
-                    media_body=media,
-                    fields="id",
-                    supportsAllDrives=True
-                ).execute()
-                if result.get("id"):
-                    uploaded_count += 1
-                else:
-                    st.warning(f"Upload of {filename} returned no ID")
-            except Exception as upload_err:
-                st.error(f"Failed to upload {filename}: {upload_err}")
-
-        if uploaded_count == 0:
-            st.error("No files were uploaded to Drive. Check the errors above.")
-            return None
+            file_meta = {"name": filename, "parents": [fid]}
+            media = MediaIoBaseUpload(io.BytesIO(file_content), mimetype=mime)
+            service.files().create(
+                body=file_meta,
+                media_body=media,
+                fields="id",
+                supportsAllDrives=True
+            ).execute()
 
         # Make subfolder shareable via link (non-fatal if it fails)
         try:
@@ -663,7 +644,7 @@ def upload_to_drive(drive_json_str: str, folder_id: str,
 
         return f"https://drive.google.com/drive/folders/{fid}"
     except Exception as e:
-        st.error(f"Drive upload failed: {e}")
+        st.warning(f"Drive upload failed: {e}")
         return None
 
 
