@@ -222,27 +222,55 @@ def extract_resume_text(uploaded_file) -> str:
     """Extract text from PDF or DOCX."""
     name = uploaded_file.name.lower()
     content = uploaded_file.read()
+    errors = []
 
     if name.endswith(".pdf"):
+        # Try pdfplumber first
         try:
             import pdfplumber
             with pdfplumber.open(io.BytesIO(content)) as pdf:
-                return "\n".join(p.extract_text() or "" for p in pdf.pages)
-        except Exception:
-            pass
+                text = "\n".join(p.extract_text() or "" for p in pdf.pages)
+            if text.strip():
+                return text
+        except ImportError:
+            errors.append("pdfplumber not installed")
+        except Exception as e:
+            errors.append(f"pdfplumber error: {e}")
+
+        # Try PyPDF2
         try:
             import PyPDF2
             reader = PyPDF2.PdfReader(io.BytesIO(content))
-            return "\n".join(p.extract_text() or "" for p in reader.pages)
-        except Exception:
-            pass
+            text = "\n".join(p.extract_text() or "" for p in reader.pages)
+            if text.strip():
+                return text
+        except ImportError:
+            errors.append("PyPDF2 not installed")
+        except Exception as e:
+            errors.append(f"PyPDF2 error: {e}")
+
+        # Try pypdf (newer replacement for PyPDF2)
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(content))
+            text = "\n".join(p.extract_text() or "" for p in reader.pages)
+            if text.strip():
+                return text
+        except ImportError:
+            errors.append("pypdf not installed")
+        except Exception as e:
+            errors.append(f"pypdf error: {e}")
+
+        if errors:
+            st.warning(f"PDF parsing attempted but failed: {' | '.join(errors)}")
         return ""
 
     elif name.endswith(".docx"):
         try:
             doc = Document(io.BytesIO(content))
             return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
-        except Exception:
+        except Exception as e:
+            st.warning(f"DOCX parsing error: {e}")
             return ""
     return ""
 
@@ -296,7 +324,7 @@ def call_claude(api_key: str, system_prompt: str, user_message: str, max_tokens:
                 "content-type"      : "application/json"
             },
             json={
-                "model"      : "claude-opus-4-6",
+                "model"      : "claude-opus-4-5",
                 "max_tokens" : max_tokens,
                 "temperature": 0.2,
                 "system"     : system_prompt,
