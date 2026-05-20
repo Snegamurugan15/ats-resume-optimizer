@@ -1,0 +1,29 @@
+# Python environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python cache/build files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Streamlit and local config
+.streamlit/secrets.toml
+.env
+.env.*
+*.log
+
+# Documents generated during local testing
+*.docx
+*.pdf
+!sample*.pdf
